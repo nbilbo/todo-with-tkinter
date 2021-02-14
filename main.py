@@ -2,7 +2,7 @@
 from control import Control
 
 if __name__ == '__main__':
-    file_name = 'my_todo'
-    control = Control(file_name)
+    db_name = 'my_todo'
+    control = Control(db_name)
     control.main()
     

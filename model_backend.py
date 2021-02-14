@@ -1,51 +1,49 @@
 # encoding: utf-8
+import sqlite3
 from json import load, dump, JSONDecodeError
 import model_exceptions
 
 
-FILE_NAME = 'tasks'
+DB_NAME = ':memory:'
 
 
-def load_file(file_name):
+def tuple_to_dict(tuple):
+    return dict(idtasks=tuple[0], name=tuple[1], status=tuple[2])
+
+def connect_to_db(db_name):
     '''
-    Read a json file to transform in a python dict.
+    Initialize a connetion to sqlite db.
     
     paramaters
     ----------
-    file_name : str
-        full name for u json file (without .json extension); 
+    db_name : str
+        data base name (without .db extension)
     
     return
     ------
-    dict
+    sqlite3.Connecition : object connection.
     '''
-    file_name += '.json'
+    if db_name != DB_NAME:
+        db_name += '.db'
+    print(f'connection in {db_name}')
         
-    try:
-        with open(file_name, 'r', encoding='utf-8') as f:
-            return load(f)
-    
-    except (FileNotFoundError, JSONDecodeError):
-        return {}
+    return sqlite3.connect(db_name)
 
-def save_file(file, file_name):
+def desconect_to_db(conn):
     '''
-    Trasform a python dict to a json file and save it.
+    Close connetion to data base.
     
-    parameters
+    paramaters
     ----------
-    file_name : str
-        full name for u json file (without .json extension); 
-    file : dict
+    conn : sqlite3.Connection
+        object connection
     '''
-    file_name += '.json'
-        
-    with open(file_name, 'w', encoding='utf-8') as f:
-        dump(file, f, indent=4, ensure_ascii=False)
- 
-def striper(func):
+    print('closing connection.')
+    conn.close()
+
+def connect(func):
     '''
-    Decorator to strip an string.
+    Decorator to reconnect to database.
     
     parameters
     ----------
@@ -53,69 +51,173 @@ def striper(func):
     
     return
     ------
-    inner_func : function
+    inner_func : funciton
     '''
-    def inner_func(file, task):
-        task = task.strip()
-        
-        return func(file, task)
+    def inner_func(conn, db_name, *args, **kwargs):
+        try:
+            conn.execute('SELECT name FROM sqlite_temp_master WHERE type="table";')
+            
+        except (AttributeError, ProgrammingError):
+            conn = connect_to_db(db_name)
+            
+        return func(conn, db_name, *args, **kwargs)
     
     return inner_func
 
-@striper   
-def inser_task(file, task):
+@connect
+def create_table(conn, db_name):
     '''
-    Insert a new task in the file.
+    Execute query to create the tables.
+    
+    paramaters
+    ----------
+    conn : sqlite3.Connection
+        object connection
+    
+    db_name : str
+        database nome (without .db extension).
+    '''
+    query = """
+    create table if not exists tasks(
+        idtasks integer primary key autoincrement,
+        name char(127) not null unique,
+        status integer default 0
+    );
+    """
+    conn.execute(query)
+
+@connect
+def inser_task(conn, db_name, name, status):
+    '''
+    Insert a new register in database.
+
+    parameters
+    ----------
+    conn: sqlite3.Connection
+        object connection
+    
+    db_name : str
+    
+    name : str
+    
+    status : int
+    '''
+    query = 'insert into tasks (name, status) values (?, ?);'
+    register = select_task(conn, db_name, name)
+    if register:
+        raise model_exceptions.AlreadyStored(f'{name} already stored.')
+    else:
+        conn.execute(query, (name, status))
+        conn.commit()
+
+@connect
+def select_task(conn, db_name, name):
+    '''
+    Select a register from database.
     
     parameters
     ----------
-    file : dict
+    conn: sqlite3.Connection
+        object connection
     
-    task : str
+    db_name : str
+    
+    name : str
+    
+    returns
+    -------
+    dict : if find the register.
+    
+    None : if not find the register.
     '''
-    if task == '':
-        raise ValueError(f'Must contain some value.')
+    query = 'select idtasks, name, status from tasks where name=?;'
+    cursor = conn.execute(query, (name, ))
+    register = cursor.fetchone()
+    register = tuple_to_dict(register) if register else None
+    
+    return register
+
+@connect
+def selec_tasks(conn, db_name):
+    '''
+    Select all register from database.
+    
+    parameters
+    ----------
+    conn: sqlite3.Connection
+        object connection
+    
+    db_name : str
+    
+    return
+    ------
+    list
+    '''
+    query = 'select idtasks, name, status from tasks order by status desc;'
+    cursor = conn.execute(query)
+    registers = [tuple_to_dict(register) for register in cursor.fetchall()]
+    
+    return registers
+
+@connect
+def updat_task(conn, db_name, name):
+    '''
+    Invert the status from a task.
+    
+    parameters
+    ----------
+    conn: sqlite3.Connection
+        object connection
+    
+    db_name : str
+    
+    name : str
+    '''
+    sql = 'update tasks set status=? where name=?;'
+    register = select_task(conn, db_name, name)
+    
+    if not register:
+        raise model_exceptions.NotStored(f'{name} not stored.')
+    else:
+        new_status = not register['status']
+        conn.execute(sql, (new_status, name))
+        conn.commit()
+
+@connect
+def delet_task(conn, db_name, name):
+    '''
+    delete the register from database.
+    
+    parameters
+    ----------
+    conn: sqlite3.Connection
+        object connection
+    
+    db_name : str
+    
+    name : str    
+    '''
+    sql = 'delete from tasks where name=?;'
+    register = select_task(conn, DB_NAME, name)
+    
+    if not register:
+        raise model_exceptions.NotStored(f'{name} not stored.')
+    else:
+        conn.execute(sql, (name,))
+        conn.commit()
+    
+
+if __name__ == '__main__':
+    conn = connect_to_db(DB_NAME)
+    create_table(conn, DB_NAME)
+    inser_task(conn, DB_NAME, 'comprar pão', 0)
+    inser_task(conn, DB_NAME, 'comprar coca-cola', 0)
+    updat_task(conn, DB_NAME, 'comprar pão')
+    delet_task(conn, DB_NAME, 'comprar coca-cola')
+    print(selec_tasks(conn, DB_NAME))
+    desconect_to_db(conn)
         
-    elif task in file.keys():
-        raise model_exceptions.AlreadyStored(f'{task} already stored.')
+    
 
-    elif task not in file.keys():
-        file[task] = False    
 
-@striper
-def updat_task(file, task):
-    '''
-    Inverts the task value.
-    
-    parameters
-    ----------
-    file : dict
-    
-    task : str
-    '''
-    if task == '':
-        raise ValueError(f'Must contain some value.')
-    elif task not in file.keys():
-        raise model_exceptions.NotStored(f'{task} not stored.')  
-    else:
-        file[task] = not file[task]
-
-@striper
-def delet_task(file, task):
-    '''
-    Delete a task in file.
-    
-    parameters
-    ----------
-    file : dict
-    
-    task : str
-    '''
-    if task == '':
-        raise ValueError(f'Must contain some value.')
-    elif task not in file.keys():
-        raise model_exceptions.NotStored(f'{task} not stored.')
-    else:
-        file.pop(task)
-    
 

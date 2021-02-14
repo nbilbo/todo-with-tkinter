@@ -70,10 +70,14 @@ class View(Tk):
         self._table.pack(fill='both', expand=True)
     
     def _config_table(self):
-        self._table['columns'] = ('#todo', '#status')
+        self._table['columns'] = ('#id', '#todo', '#status')
+        
+        self._table.heading('#id', text='id')
         self._table.heading('#todo', text='Todo')
         self._table.heading('#status', text='Status')
+        
         self._table.column('#0', minwidth=0, width=0, stretch=False)
+        self._table.column('#id', minwidth=0, width=0, stretch=False)
         self._table.column('#status', minwidth=60, width=60, stretch=False)
     
     def _create_btn_style(self):
@@ -87,14 +91,14 @@ class View(Tk):
     
     def _selections(self):
         '''
-        Get every selection in table.
+        Get every name that is selectioned in table.
         
         return
         ------
         list
         '''
         selects = self._table.selection()
-        return [self._table.item(select)['values'][0] for select in selects]
+        return [self._table.item(select)['values'][1] for select in selects]
         
     def _call_inser_task(self):
         self._control.inser_task(self._current.get())
@@ -123,8 +127,10 @@ class View(Tk):
         '''
         self._table.delete(*self._table.get_children())
         
-        for key, value in todos.items():
-            self._table.insert('', 'end', values=(key, value))
+        for register in todos:
+            self._table.insert('', 'end', values=(register['idtasks'], 
+                                                  register['name'], 
+                                                  register['status']))
     
     def show_alert(self, alert):
         '''

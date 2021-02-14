@@ -5,17 +5,17 @@ import view
 
 
 class Control(object):
-    def __init__(self, file_name=None):
+    def __init__(self, db_name=None):
         '''
         parameters
         ----------
-        file_name : str
-            name for u json file(without .json extension); if None, the
-            file will receive the dafault name.
+        db_name : str
+            name for u sqlite database(without .db extension); if None, 
+            will receive the dafault name.
         '''
-        self._model = model.Model(file_name)
-        self._view = view.View(self, f'Todo {self._model.file_name()}')
-        self._view.show_todos(self._model.file())
+        self._model = model.Model(db_name)
+        self._view = view.View(self, f'Database {self._model.db_name()}')
+        self._view.show_todos(self._model.selec_tasks())
         
 
     def _save_and_show(func, *args, **kwargs):
@@ -32,8 +32,7 @@ class Control(object):
         '''
         def inner_func(self, *args, **kwargs):
             func(self, *args, **kwargs)
-            self._model.save_file()
-            self._view.show_todos(self._model.file())
+            self._view.show_todos(self._model.selec_tasks())
               
         return inner_func
     
@@ -103,8 +102,9 @@ class Control(object):
         '''
         self._view.main()
 
-
-
+if __name__ == '__main__':
+    control = Control()
+    control.main()
 
 
 
